@@ -562,12 +562,28 @@ async function renderSession(absPath, { limit = 500 } = {}) {
 
   const buffer = [];   // sliding window of renderable events
   let total = 0;       // count of renderable events seen, for the truncate banner
+  const usage = { turns: 0, input: 0, output: 0, cacheCreate: 0, cacheRead: 0, model: null };
 
   for await (const line of rl) {
     if (!line || !line.trim()) continue;
     let evt;
     try { evt = JSON.parse(line); } catch { continue; }
-    if (!evt || !RENDERED_TYPES.has(evt.type)) continue;
+    if (!evt) continue;
+
+    // Aggregate token usage from every assistant event, even ones that get
+    // shifted out of the sliding render buffer. This is the only pass over
+    // the file, so we have to count here.
+    if (evt.type === 'assistant' && evt.message && evt.message.usage) {
+      const u = evt.message.usage;
+      usage.turns++;
+      usage.input += u.input_tokens || 0;
+      usage.output += u.output_tokens || 0;
+      usage.cacheCreate += u.cache_creation_input_tokens || 0;
+      usage.cacheRead += u.cache_read_input_tokens || 0;
+      if (!usage.model && evt.message.model) usage.model = evt.message.model;
+    }
+
+    if (!RENDERED_TYPES.has(evt.type)) continue;
     total++;
     buffer.push(evt);
     if (buffer.length > cap) buffer.shift();
@@ -582,7 +598,32 @@ async function renderSession(absPath, { limit = 500 } = {}) {
     html += `<div class="session-truncate">${banner}</div>`;
   }
   for (const e of buffer) html += renderSessionEvent(e);
-  return { html, total, shown: buffer.length };
+  return { html, total, shown: buffer.length, usage };
+}
+
+// Format a token count as either a raw number with thousands separators
+// (under 10k) or with a k/M suffix (above).
+function fmtTokens(n) {
+  if (!n) return '0';
+  if (n < 10_000) return n.toLocaleString('en-US');
+  if (n < 1_000_000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return (n / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
+}
+
+function renderUsageCard(usage) {
+  if (!usage || !usage.turns) return '';
+  const totalIn = usage.input + usage.cacheCreate + usage.cacheRead;
+  return `<div class="usage-card">
+  <div class="usage-card__head">Tokens${usage.model ? ` <span class="usage-card__model">${escapeHtml(usage.model)}</span>` : ''}</div>
+  <div class="usage-card__grid">
+    <div><div class="usage-card__label">turns</div><div class="usage-card__num">${fmtTokens(usage.turns)}</div></div>
+    <div><div class="usage-card__label">input</div><div class="usage-card__num">${fmtTokens(usage.input)}</div></div>
+    <div><div class="usage-card__label">output</div><div class="usage-card__num">${fmtTokens(usage.output)}</div></div>
+    <div><div class="usage-card__label">cache write</div><div class="usage-card__num">${fmtTokens(usage.cacheCreate)}</div></div>
+    <div><div class="usage-card__label">cache read</div><div class="usage-card__num">${fmtTokens(usage.cacheRead)}</div></div>
+    <div><div class="usage-card__label">total in</div><div class="usage-card__num">${fmtTokens(totalIn)}</div></div>
+  </div>
+</div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -804,6 +845,13 @@ table.list .when { font-family: ui-monospace, monospace; color: var(--text-dim);
 .session-meta { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1.1rem; margin: 1rem 0 1.5rem; font-size: 0.85rem; color: var(--text-muted); display: flex; gap: 1.5rem; flex-wrap: wrap; }
 .session-meta strong { color: var(--text); font-weight: 600; }
 .session-truncate { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-muted); }
+
+.usage-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.25rem; margin: 0 0 1.5rem; }
+.usage-card__head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); font-weight: 600; margin-bottom: 0.85rem; display: flex; justify-content: space-between; align-items: baseline; }
+.usage-card__model { color: var(--text-muted); font-family: ui-monospace, monospace; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 0.75rem; }
+.usage-card__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; }
+.usage-card__label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.2rem; }
+.usage-card__num { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 1.15rem; color: var(--heading); font-weight: 500; }
 
 .evt { margin: 0.85rem 0; padding: 0.85rem 1.1rem; border-radius: 10px; border: 1px solid var(--border-soft); position: relative; }
 .evt--user { background: var(--user-tint); border-color: rgba(184, 168, 255, 0.12); }
@@ -1245,8 +1293,8 @@ async function handleRequest(req) {
       } catch {}
       const proj = nav.projects.find(p => p.slug === slug);
       const projPath = proj ? proj.decodedPath : slug;
-      const { html: events, total, shown } = await renderSession(abs, { limit });
-      const content = `<div class="hero"><h1>Session</h1><p>Transcript from <code>${escapeHtml(projPath)}</code>.</p></div>${sessionMeta}${events || '<p style="color:var(--text-muted);">No renderable events in this session.</p>'}`;
+      const { html: events, total, shown, usage } = await renderSession(abs, { limit });
+      const content = `<div class="hero"><h1>Session</h1><p>Transcript from <code>${escapeHtml(projPath)}</code>.</p></div>${sessionMeta}${renderUsageCard(usage)}${events || '<p style="color:var(--text-muted);">No renderable events in this session.</p>'}`;
       return html(200, content, {
         title: `Session ${sessionId.slice(0, 8)}`,
         section: 'projects',
