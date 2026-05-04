@@ -256,11 +256,10 @@ export async function projectDetail(slug, nav) {
   const sessions = (nav.sessions || []).filter(s => s.projectSlug === slug);
   let sessionsHTML = '';
   if (sessions.length > 0) {
-    sessionsHTML = `<h2>Sessions</h2><table class="list"><thead><tr><th>Title</th><th>ID</th><th class="num">Turns</th><th class="num">In</th><th class="num">Out</th><th class="num">Size</th><th class="when">Modified</th></tr></thead><tbody>${sessions.map(s => {
+    sessionsHTML = `<h2>Sessions</h2><table class="list"><thead><tr><th>Title</th><th class="num">Turns</th><th class="num">In</th><th class="num">Out</th><th class="num">Size</th><th class="when">Modified</th></tr></thead><tbody>${sessions.map(s => {
       const u = s.usage || emptyUsage();
       return `<tr>
         <td><a href="/projects/${slug}/sessions/${s.id}">${escapeHtml(s.title || '<untitled>')}</a></td>
-        <td><code>${s.id.slice(0, 8)}</code></td>
         <td class="num">${u.turns || '—'}</td>
         <td class="num">${u.input || u.cacheCreate || u.cacheRead ? fmtTokens(totalIn(u)) : '—'}</td>
         <td class="num">${u.output ? fmtTokens(u.output) : '—'}</td>

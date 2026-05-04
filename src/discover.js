@@ -5,7 +5,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { existsSync, createReadStream } from 'node:fs';
 import { join } from 'node:path';
-import { HOME, isHidden } from './util.js';
+import { HOME, isHidden, stripCommandWrappers } from './util.js';
 import { pageBlurb } from './markdown.js';
 
 // Sorted list of *.md files (without extension) under a directory.
@@ -189,25 +189,45 @@ async function discoverWiki() {
   return out;
 }
 
-// Read just enough of a JSONL session to find its title event. Both
-// "ai-title" (aiTitle) and "custom-title" (customTitle) appear early in
-// transcripts, so a 20KB head is plenty.
+// Pull a useful title from the first chunk of a JSONL session. Preference:
+//   1. ai-title (Claude Code generates this once a session is substantive)
+//   2. custom-title (set by user via /title or similar)
+//   3. first real user message, truncated, as a fallback
+//
+// Many short or interrupted sessions never get titled by Claude Code, but
+// they almost always have a first user prompt that says what the user came
+// to do. Reading 50KB is enough to skip past the command-caveat boilerplate
+// and reach actual user content.
 async function readSessionTitle(absPath) {
   return new Promise((resolve) => {
-    const stream = createReadStream(absPath, { encoding: 'utf8', start: 0, end: 20000 });
+    const stream = createReadStream(absPath, { encoding: 'utf8', start: 0, end: 50000 });
     let buf = '';
     stream.on('data', chunk => { buf += chunk; });
     stream.on('end', () => {
-      let custom = null, ai = null;
+      let custom = null, ai = null, firstUserText = null;
       for (const line of buf.split('\n')) {
         if (!line.trim()) continue;
         try {
           const evt = JSON.parse(line);
           if (evt.type === 'ai-title' && typeof evt.aiTitle === 'string') ai = evt.aiTitle;
           else if (evt.type === 'custom-title' && typeof evt.customTitle === 'string') custom = evt.customTitle;
+          else if (!firstUserText && evt.type === 'user' && evt.message) {
+            const content = evt.message.content;
+            let text = '';
+            if (typeof content === 'string') text = content;
+            else if (Array.isArray(content)) {
+              for (const c of content) if (c.type === 'text') { text = c.text || ''; break; }
+            }
+            text = stripCommandWrappers(text).trim();
+            // Skip system-reminder noise and trivially short blurts.
+            if (text.length > 8 && !text.startsWith('<system-reminder>')) firstUserText = text;
+          }
         } catch {}
       }
-      resolve(ai || custom || null);
+      const fallback = firstUserText
+        ? firstUserText.slice(0, 100).replace(/\s+/g, ' ') + (firstUserText.length > 100 ? '...' : '')
+        : null;
+      resolve(ai || custom || fallback);
     });
     stream.on('error', () => resolve(null));
   });
