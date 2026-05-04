@@ -5,16 +5,9 @@
   "type": "module",
   "description": "Local HTTP viewer for ~/.claude/. Browse instructions, per-project memory, sessions, plans, skills, plugins, and any wiki you maintain.",
   "scripts": {
-    "start": "node server.mjs",
-    "seed": "node scripts/seed-demo.mjs",
-    "demo": "node scripts/demo.mjs",
-    "record": "node scripts/record.mjs"
+    "start": "node server.mjs"
   },
   "dependencies": {
     "marked": "^14.1.3"
-  },
-  "devDependencies": {
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "playwright": "^1.59.1"
   }
 }

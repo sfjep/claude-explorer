@@ -3,6 +3,10 @@ node_modules/
 *.log
 .env
 .env.local
+
+# Demo and GIF-generation tooling. Not part of the published artifact.
+# Local copies of these stay untracked.
+scripts/
 .video-tmp/
 media/*.webm
 media/.palette.png

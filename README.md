@@ -7,25 +7,17 @@ total. Locally, in one tab.
 
 ![claude-explorer overview](./media/hero.gif)
 
-## Try it without your real data
+## Run
 
 ```
 git clone git@github.com:sfjep/claude-explorer.git
 cd claude-explorer
-pnpm install
-pnpm demo
-```
-
-Open `http://localhost:4567`. You'll see a fully-populated demo: two fake
-projects with realistic session transcripts, token totals, auto-memory,
-plans, skills, plugins, and a Karpathy-style wiki. Nothing in your real
-`~/.claude/` is touched.
-
-To run against your actual home directory:
-
-```
+pnpm install   # or npm install
 pnpm start
 ```
+
+Open `http://localhost:4567`. The server reads from `~/.claude/`, renders
+only what's there, never writes.
 
 ## What you actually get
 
@@ -90,44 +82,6 @@ wrote them for yourself.
 
 Add more patterns via the config file's `hide` field if you want extra
 hidden.
-
-## Recording demos
-
-`pnpm record` produces a hero GIF/WebM by driving the demo through
-Playwright. Reproducible, no manual cursor jitter, no exposing real data.
-
-```
-pnpm install                          # pulls playwright as a dev dep
-pnpm exec playwright install chromium # one-time browser download
-sudo apt install ffmpeg               # (or brew/etc.) optional, needed for GIF
-pnpm record
-```
-
-Output:
-
-- `media/hero.webm` (always)
-- `media/hero.gif` (only if ffmpeg is on PATH)
-
-The script seeds the dummy `~/.claude/`, boots the server pointed at it,
-opens a 1280x800 headless Chromium, navigates Home → Sessions → first
-session → scroll → Projects → first project, captures ~7 seconds, then
-converts to a 12fps 1024px-wide palette-optimized GIF.
-
-To embed the GIF in this README, uncomment the line near the top of the
-file once `media/hero.gif` exists:
-
-```
-![claude-explorer overview](./media/hero.gif)
-```
-
-Aim for **under 5 MB** so it loads fast on GitHub. If you blow that
-budget after a UI change, drop framerate to 10fps or width to 900px in
-`scripts/record.mjs`.
-
-If you'd rather record manually (e.g. to capture cursor movement), the
-fallback is any screen recorder against `pnpm demo` running on
-`http://localhost:4567`. ScreenToGif (Windows) or QuickTime + ffmpeg
-(macOS) both work.
 
 ## What's not here yet
 
