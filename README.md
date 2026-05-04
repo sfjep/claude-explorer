@@ -5,11 +5,7 @@ transcript you've ever recorded. See what Claude has remembered about each
 of your projects. Watch your token spend per session, per project, in
 total. Locally, in one tab.
 
-<!-- HERO GIF: 5-8 second clip cycling through home -> projects -> a session
-     transcript with the token-usage card visible. See "Recording demos"
-     section below for the recipe. Place at media/hero.gif and uncomment:
 ![claude-explorer overview](./media/hero.gif)
--->
 
 ## Try it without your real data
 

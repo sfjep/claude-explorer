@@ -14,7 +14,7 @@
 //   media/hero.gif       (if ffmpeg is available)
 //   media/hero.webm      (always, the raw recording)
 
-import { spawn, exec } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, rm, readdir, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -199,26 +199,42 @@ await rename(resolve(videoDir, webm), finalWebm);
 await rm(videoDir, { recursive: true, force: true });
 console.log(`WebM:  ${finalWebm}`);
 
-const execp = promisify(exec);
-async function hasFfmpeg() {
-  try { await execp('ffmpeg -version'); return true; } catch { return false; }
+// Resolve a usable ffmpeg binary. Prefer the vendored
+// @ffmpeg-installer/ffmpeg (no sudo, ships with `pnpm install -D`),
+// fall back to a system ffmpeg on PATH.
+const execFileP = promisify(execFile);
+async function resolveFfmpeg() {
+  try {
+    const mod = await import('@ffmpeg-installer/ffmpeg');
+    if (mod && mod.default && mod.default.path) return mod.default.path;
+  } catch {}
+  try {
+    await execFileP('ffmpeg', ['-version']);
+    return 'ffmpeg';
+  } catch {}
+  return null;
 }
 
-if (await hasFfmpeg()) {
+const ffmpeg = await resolveFfmpeg();
+if (ffmpeg) {
   console.log('Converting to GIF...');
   const palette = resolve(mediaDir, '.palette.png');
-  const filterCommon = 'fps=12,scale=1024:-1:flags=lanczos';
-  await execp(`ffmpeg -y -i "${finalWebm}" -vf "${filterCommon},palettegen" "${palette}"`);
-  await execp(`ffmpeg -y -i "${finalWebm}" -i "${palette}" -filter_complex "${filterCommon}[x];[x][1:v]paletteuse" "${finalGif}"`);
+  const filterCommon = 'fps=10,scale=960:-1:flags=lanczos';
+  await execFileP(ffmpeg, ['-y', '-i', finalWebm, '-vf', `${filterCommon},palettegen`, palette]);
+  await execFileP(ffmpeg, [
+    '-y', '-i', finalWebm, '-i', palette,
+    '-filter_complex', `${filterCommon}[x];[x][1:v]paletteuse`,
+    finalGif,
+  ]);
   await rm(palette, { force: true });
   console.log(`GIF:   ${finalGif}`);
   console.log('');
-  console.log('Embed in README.md by uncommenting the line:');
+  console.log('Embed in README.md if not already:');
   console.log('  ![claude-explorer overview](./media/hero.gif)');
 } else {
   console.log('');
-  console.log('ffmpeg not found on PATH. WebM is saved at media/hero.webm.');
-  console.log('Install ffmpeg (e.g. `sudo apt install ffmpeg`) and rerun');
-  console.log('`pnpm record` to produce media/hero.gif.');
+  console.log('No ffmpeg available (vendored or on PATH). WebM saved at');
+  console.log('media/hero.webm. Run `pnpm install` to pull the vendored');
+  console.log('binary, or install ffmpeg system-wide, then rerun.');
 }
 process.exit(0);
