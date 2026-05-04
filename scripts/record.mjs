@@ -84,12 +84,20 @@ const context = await browser.newContext({
 // Inject a fake cursor so the WebM has a visible pointer. Playwright fires
 // real DOM mouse events but does not render a cursor; this listens for
 // mousemove/mousedown and animates a styled <div> in response.
+//
+// Position is persisted to localStorage on every move, so the cursor on a
+// freshly-loaded page is born where the previous page's cursor died. No
+// teleport flicker on navigation.
 await context.addInitScript(() => {
+  const KEY = '__rec_cursor_pos';
+  let stored = { x: 640, y: 400 };
+  try { stored = JSON.parse(localStorage.getItem(KEY)) || stored; } catch {}
+
   const dot = document.createElement('div');
   dot.id = '__rec_cursor';
   dot.style.cssText = `
     position: fixed; pointer-events: none; z-index: 2147483647;
-    left: 640px; top: 400px;
+    left: ${stored.x}px; top: ${stored.y}px;
     width: 18px; height: 18px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.95);
@@ -105,9 +113,11 @@ await context.addInitScript(() => {
     else document.addEventListener('DOMContentLoaded', () => document.body.appendChild(dot));
   };
   place();
+
   window.addEventListener('mousemove', (e) => {
     dot.style.left = e.clientX + 'px';
     dot.style.top = e.clientY + 'px';
+    try { localStorage.setItem(KEY, JSON.stringify({ x: e.clientX, y: e.clientY })); } catch {}
   }, true);
   window.addEventListener('mousedown', () => {
     dot.style.transform = 'translate(-50%, -50%) scale(0.55)';
