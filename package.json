@@ -1,0 +1,13 @@
+{
+  "name": "claude-explorer",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Local HTTP viewer for ~/.claude/. Browse instructions, per-project memory, sessions, plans, skills, plugins, and any wiki you maintain.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "marked": "^14.1.3"
+  }
+}
