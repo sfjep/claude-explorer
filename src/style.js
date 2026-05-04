@@ -209,8 +209,8 @@ table.list th, table.list td { padding: 0.6rem 0.75rem; border-bottom: 1px solid
 table.list th { color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
 table.list td { color: var(--text); }
 table.list tr:hover td { background: var(--bg-soft); }
-table.list .num { font-family: ui-monospace, monospace; color: var(--text-muted); text-align: right; }
-table.list .when { font-family: ui-monospace, monospace; color: var(--text-dim); white-space: nowrap; }
+table.list .num { font-family: ui-monospace, monospace; color: var(--text-muted); text-align: right; white-space: nowrap; }
+table.list .when { font-family: ui-monospace, monospace; color: var(--text-dim); white-space: nowrap; text-align: right; }
 
 /* Session viewer */
 .session-meta { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1.1rem; margin: 1rem 0 1.5rem; font-size: 0.85rem; color: var(--text-muted); display: flex; gap: 1.5rem; flex-wrap: wrap; }
