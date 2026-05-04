@@ -97,36 +97,41 @@ hidden.
 
 ## Recording demos
 
-The `pnpm demo` command exists partly so anyone can produce GIFs without
-exposing personal data. Recipe:
+`pnpm record` produces a hero GIF/WebM by driving the demo through
+Playwright. Reproducible, no manual cursor jitter, no exposing real data.
 
-```bash
-# 1. Boot the demo
-pnpm demo
-
-# 2. Open localhost:4567 in a clean browser window (1280x800 ideal)
-
-# 3. Record the screen. On Linux/WSL:
-ffmpeg -f x11grab -framerate 15 -video_size 1280x800 -i :0.0+0,0 \
-       -t 8 -y demo.mp4
-# (macOS: QuickTime Player > File > New Screen Recording)
-# (Windows: built-in Game Bar with Win+Alt+R)
-
-# 4. Convert to optimized GIF
-ffmpeg -i demo.mp4 -vf "fps=12,scale=1024:-1:flags=lanczos,palettegen" \
-       -y palette.png
-ffmpeg -i demo.mp4 -i palette.png -filter_complex \
-       "fps=12,scale=1024:-1:flags=lanczos[x];[x][1:v]paletteuse" \
-       -y media/hero.gif
+```
+pnpm install                          # pulls playwright as a dev dep
+pnpm exec playwright install chromium # one-time browser download
+sudo apt install ffmpeg               # (or brew/etc.) optional, needed for GIF
+pnpm record
 ```
 
-Aim for **under 5 MB** so it loads fast on the GitHub README. If you blow
-that budget, drop framerate to 10fps or width to 900px. GitHub also
-renders MP4 inline in issues / PR descriptions but for README files GIF
-is still the most reliable embed.
+Output:
 
-A good hero loop is 6-8 seconds: home page > projects table > click into
-the largest project > click a session > scroll past the token card.
+- `media/hero.webm` (always)
+- `media/hero.gif` (only if ffmpeg is on PATH)
+
+The script seeds the dummy `~/.claude/`, boots the server pointed at it,
+opens a 1280x800 headless Chromium, navigates Home → Sessions → first
+session → scroll → Projects → first project, captures ~7 seconds, then
+converts to a 12fps 1024px-wide palette-optimized GIF.
+
+To embed the GIF in this README, uncomment the line near the top of the
+file once `media/hero.gif` exists:
+
+```
+![claude-explorer overview](./media/hero.gif)
+```
+
+Aim for **under 5 MB** so it loads fast on GitHub. If you blow that
+budget after a UI change, drop framerate to 10fps or width to 900px in
+`scripts/record.mjs`.
+
+If you'd rather record manually (e.g. to capture cursor movement), the
+fallback is any screen recorder against `pnpm demo` running on
+`http://localhost:4567`. ScreenToGif (Windows) or QuickTime + ffmpeg
+(macOS) both work.
 
 ## What's not here yet
 
