@@ -4,7 +4,8 @@
 
 import { createServer } from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { join, posix, basename, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { marked } from 'marked';
@@ -409,17 +410,29 @@ function stripCommandWrappers(text) {
     .trim();
 }
 
-function renderSessionEvent(evt, idx) {
+// Caps to prevent rendering pathological events (huge tool inputs, multi-MB
+// pasted file contents) from blowing up the page or the heap.
+const MAX_TEXT_BLOCK = 20000;       // marked.parse() input cap, per text block
+const MAX_THINKING = 4000;
+const MAX_TOOL_INPUT = 1500;
+const MAX_TOOL_RESULT = 1200;
+const MAX_BUFFER_HARD_CAP = 2000;   // even with ?limit=all, never buffer more
+
+function capText(s, cap) {
+  if (!s) return '';
+  return s.length > cap ? s.slice(0, cap) + '\n\n[... truncated, full text in raw JSONL]' : s;
+}
+
+function renderSessionEvent(evt) {
   const t = evt.type;
   if (!RENDERED_TYPES.has(t)) return '';
   const ts = evt.timestamp ? new Date(evt.timestamp).toLocaleString() : '';
   const meta = `<div class="evt__meta">${escapeHtml(ts)}</div>`;
 
   if (t === 'system') {
-    const content = evt.content || '';
-    const stripped = stripCommandWrappers(content);
+    const stripped = stripCommandWrappers(evt.content || '');
     if (!stripped) return '';
-    return `<div class="evt evt--system">${meta}<pre>${escapeHtml(stripped)}</pre></div>`;
+    return `<div class="evt evt--system">${meta}<pre>${escapeHtml(capText(stripped, MAX_TEXT_BLOCK))}</pre></div>`;
   }
 
   const msg = evt.message || {};
@@ -443,12 +456,12 @@ function renderSessionEvent(evt, idx) {
     }
     let html = '';
     if (textParts.length > 0) {
-      const combined = textParts.join('\n\n');
+      const combined = capText(textParts.join('\n\n'), MAX_TEXT_BLOCK);
       html += `<div class="evt evt--user">${meta}<div class="evt__role">user</div><div class="evt__body">${marked.parse(combined)}</div></div>`;
     }
     for (const tr of toolResults) {
       const summary = typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content);
-      const trimmed = summary.length > 600 ? summary.slice(0, 600) + '\n\n[truncated]' : summary;
+      const trimmed = summary.length > MAX_TOOL_RESULT ? summary.slice(0, MAX_TOOL_RESULT) + '\n\n[truncated]' : summary;
       html += `<details class="evt evt--tool-result"><summary><span class="evt__role">tool result</span> <span class="evt__tag">${escapeHtml(tr.tool_use_id || '').slice(-8)}</span></summary><pre>${escapeHtml(trimmed)}</pre></details>`;
     }
     return html;
@@ -459,13 +472,14 @@ function renderSessionEvent(evt, idx) {
     let html = '';
     for (const c of content) {
       if (c.type === 'text') {
-        html += `<div class="evt evt--assistant">${meta}<div class="evt__role">assistant</div><div class="evt__body">${marked.parse(c.text || '')}</div></div>`;
+        const text = capText(c.text || '', MAX_TEXT_BLOCK);
+        html += `<div class="evt evt--assistant">${meta}<div class="evt__role">assistant</div><div class="evt__body">${marked.parse(text)}</div></div>`;
       } else if (c.type === 'thinking') {
-        const text = (c.thinking || c.text || '').slice(0, 4000);
+        const text = capText(c.thinking || c.text || '', MAX_THINKING);
         html += `<details class="evt evt--thinking"><summary><span class="evt__role">thinking</span></summary><div class="evt__body">${marked.parse(text)}</div></details>`;
       } else if (c.type === 'tool_use') {
         const inp = JSON.stringify(c.input || {}, null, 2);
-        const inpTrimmed = inp.length > 1500 ? inp.slice(0, 1500) + '\n[truncated]' : inp;
+        const inpTrimmed = inp.length > MAX_TOOL_INPUT ? inp.slice(0, MAX_TOOL_INPUT) + '\n[truncated]' : inp;
         html += `<details class="evt evt--tool-use"><summary><span class="evt__role">tool</span> <code>${escapeHtml(c.name || '?')}</code></summary><pre>${escapeHtml(inpTrimmed)}</pre></details>`;
       }
     }
@@ -474,25 +488,38 @@ function renderSessionEvent(evt, idx) {
   return '';
 }
 
+// Streams a JSONL session line-by-line. Keeps a sliding window of the last
+// `limit` renderable events so memory stays O(limit), not O(file size).
+// Multi-megabyte sessions with image attachments or huge tool outputs no
+// longer drag the whole file into memory.
 async function renderSession(absPath, { limit = 500 } = {}) {
-  const raw = await readFile(absPath, 'utf8');
-  const lines = raw.split('\n').filter(l => l.trim());
-  let events = [];
-  for (const line of lines) {
-    try { events.push(JSON.parse(line)); } catch {}
+  const cap = limit === 'all' ? MAX_BUFFER_HARD_CAP : Math.min(Number(limit) || 500, MAX_BUFFER_HARD_CAP);
+  const stream = createReadStream(absPath, { encoding: 'utf8' });
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+
+  const buffer = [];   // sliding window of renderable events
+  let total = 0;       // count of renderable events seen, for the truncate banner
+
+  for await (const line of rl) {
+    if (!line || !line.trim()) continue;
+    let evt;
+    try { evt = JSON.parse(line); } catch { continue; }
+    if (!evt || !RENDERED_TYPES.has(evt.type)) continue;
+    total++;
+    buffer.push(evt);
+    if (buffer.length > cap) buffer.shift();
   }
-  const total = events.filter(e => RENDERED_TYPES.has(e.type)).length;
-  // Slice to last N events to keep transcripts readable.
-  const renderable = events.filter(e => RENDERED_TYPES.has(e.type));
-  const slice = limit === 'all' ? renderable : renderable.slice(-Math.min(limit, renderable.length));
-  const omitted = renderable.length - slice.length;
+
+  const omitted = total - buffer.length;
   let html = '';
   if (omitted > 0) {
-    html += `<div class="session-truncate">Showing the most recent ${slice.length} of ${total} events. <a href="?limit=all">Show all</a>.</div>`;
+    const banner = limit === 'all'
+      ? `Showing the most recent ${buffer.length} of ${total} events (capped at ${MAX_BUFFER_HARD_CAP}).`
+      : `Showing the most recent ${buffer.length} of ${total} events. <a href="?limit=all">Show more</a>.`;
+    html += `<div class="session-truncate">${banner}</div>`;
   }
-  let i = 0;
-  for (const e of slice) html += renderSessionEvent(e, i++);
-  return { html, total, shown: slice.length };
+  for (const e of buffer) html += renderSessionEvent(e);
+  return { html, total, shown: buffer.length };
 }
 
 // ---------------------------------------------------------------------------
