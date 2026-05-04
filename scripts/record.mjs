@@ -146,27 +146,41 @@ async function clickAt(selector) {
 }
 
 console.log('Recording...');
-// Loop is ~8s, designed to read well at 12fps with the visible cursor.
+// Loop is ~12s, designed to read well at 12fps with the visible cursor.
+// Beats: home -> sessions -> session detail (scroll) -> wiki ->
+// wiki project -> projects -> project detail (scroll).
 await page.goto(`http://localhost:${PORT}/`);
 // Park the cursor in the middle so it's visible from frame 1.
 await page.mouse.move(640, 400, { steps: 1 });
-await sleep(1500);
+await sleep(1300);
 
 await clickAt('header.topbar nav a[href="/sessions"]');
-await sleep(1400);
+await sleep(1300);
 
 await clickAt('table.list tbody tr:first-of-type a');
-await sleep(1300);
-await page.evaluate(() => window.scrollBy({ top: 380, behavior: 'smooth' }));
-await sleep(1300);
+await sleep(1100);
+await page.evaluate(() => window.scrollBy({ top: 420, behavior: 'smooth' }));
+await sleep(1100);
 
 await page.goBack();
-await sleep(500);
+await sleep(400);
+await clickAt('header.topbar nav a[href="/wiki"]');
+await sleep(1200);
+
+// Wiki sidebar shows projects/entities/concepts/sources. Pick a
+// rich project page (podcraft) to showcase real prose rendering.
+await clickAt('aside.sidebar a[href="/wiki/projects/podcraft"]');
+await sleep(1200);
+await page.evaluate(() => window.scrollBy({ top: 360, behavior: 'smooth' }));
+await sleep(1100);
+
 await clickAt('header.topbar nav a[href="/projects"]');
-await sleep(1400);
+await sleep(1200);
 
 await clickAt('table.list tbody tr:first-of-type a');
-await sleep(1600);
+await sleep(900);
+await page.evaluate(() => window.scrollBy({ top: 480, behavior: 'smooth' }));
+await sleep(1500);
 
 await context.close();
 await browser.close();

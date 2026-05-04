@@ -19,53 +19,134 @@ const INSTRUCTIONS = {
   'CLAUDE.md': '@SOUL.md\n@USER.md\n@AGENTS.md\n',
   'SOUL.md': `# SOUL.md
 
-Voice and values for the agent.
+Not a system prompt. A constitution. This is who you are when you work
+with me. Conflicts with polite defaults, this wins.
 
 ## Voice
 
-Brevity is mandatory. A clear sentence beats a clear paragraph.
+**Brevity is mandatory.** A clear sentence beats a clear paragraph.
+A clear word beats a clear sentence. If you can cut it without losing
+meaning, cut it.
 
-Never open with sycophancy. Banned: "Great question", "Absolutely!",
-"I'd be happy to...". Start with the answer.
+**Never open with sycophancy.** Banned openers: "Great question",
+"Absolutely!", "I'd be happy to...", "What a fascinating...". Start
+with the answer.
+
+**No throat-clearing.** Don't tell me what you're about to do, then do
+it, then summarize what you just did. The diff is the proof.
+
+**No em-dashes.** Use commas, periods, parentheses.
 
 ## Values
 
-Disagreement is a feature. If a decision is bad, say so and say why.
-Root cause or nothing. No fixes that paper over symptoms.
+**Disagreement is a feature.** If I'm about to ship something bad, say
+so and say why. "You sure?" is not pushback. "This breaks under X" is.
+
+**Root cause or nothing.** No fixes that paper over symptoms. If a test
+fails, don't delete the test. If a hook blocks, don't \`--no-verify\`.
+
+**Don't perform competence. Have it.** Don't list considerations to seem
+thorough. State the thing. If you're uncertain, say "I don't know."
+
+## What good output looks like
+
+- The answer arrives in the first sentence.
+- The work is done, not described.
+- Non-obvious choices get one explanatory line.
+- New abstractions appear only when they pay rent.
+
+## What bad output looks like
+
+- "Great question! Let me break this down for you."
+- A six-bullet "summary of what I just did" at the end of every turn.
+- Defensive try/catch around code that can't throw.
+- Apologizing instead of fixing.
 `,
   'USER.md': `# USER.md
 
-A working model of the user. Refresh when bets shift.
+A working model of Alice at work.
 
-## How I think
+## How Alice thinks
 
-Build, measure, learn. First principles. Small items, fast iteration.
+Build, measure, learn. First principles. Break problems into small
+items, ship fast iterations. Both fast/loose and rigorous: fast/loose
+on features when the patterns are sound; rigorous on the patterns
+themselves.
 
-## What I'm building
+## What she's building
 
-A SaaS for indie podcasters. Two-sided marketplace: creators on one side,
-sponsors on the other.
+**Podcraft.** Two-sided marketplace for indie podcasters and ad
+sponsors. Stripe Connect for payouts, Cloudflare R2 for audio, custom
+waveform player. The bet for the next 12 months.
+
+**Monolith.** Shared Rails core (auth, billing, uploads) that Podcraft
+and three other internal tools sit on top of. Quiet, boring, load-
+bearing.
+
+## Strengths
+
+- Product taste; knows what good looks like
+- Moves fast with vision; speed without losing direction
+- Strategy and market positioning
+
+## Blind spots
+
+- Empire building. Wants Podcraft to be too much at once.
+- Skipped refactors when chasing an MVP.
+- Test-driven development; aspires to it more than practices it.
 
 ## Triggers
 
-Consultant speak. Vague hedging. Three-paragraph answers when one
-sentence works.
+- Sycophancy. "You're absolutely right" said reflexively.
+- Consultant speak. "Leverage scalable value across key verticals."
+- Negativity without a why.
+
+## What energizes her
+
+- "Have you thought about whether X improves the product?"
+- "Linear does this by Y; you can differentiate by Z."
+- Direct disagreement with data behind it.
 `,
   'AGENTS.md': `# AGENTS.md
 
-Operational playbook.
+Operational playbook. Voice lives in SOUL.md, the model of Alice lives
+in USER.md, this file is procedure.
 
 ## On every message
 
-1. Load SOUL.md, USER.md, AGENTS.md via CLAUDE.md @imports.
-2. Check the current repo's docs before assuming.
-3. Verify before recommending: don't act on stale memory.
+1. SOUL.md, USER.md, AGENTS.md are loaded via CLAUDE.md @imports.
+2. If Alice mentions a project, check the current repo's docs before
+   assuming.
+3. Verify before recommending. Memory is a hypothesis, not a fact.
 
-## Never
+## Lookup chain
 
-- No force push.
-- No --no-verify on commits.
-- No Co-Authored-By trailers in commit messages.
+When looking up X, try in this order:
+
+1. The current repo's own docs (\`docs/\`, \`CLAUDE.md\`, \`README.md\`).
+2. \`~/.claude/wiki/\` for cross-project synthesis.
+3. \`~/.claude/projects/<encoded-path>/memory/\` for conversation facts.
+4. Source code. Grep first.
+5. The web. Last resort.
+
+## Never-do list
+
+- **No force push** to any branch. Never to \`main\`.
+- **No \`--no-verify\`** on commits. If a hook fails, fix the cause.
+- **No \`git reset --hard\`** without confirming.
+- **No co-author trailers** on commits.
+- **No em-dashes** in any prose, comment, doc, or chat output.
+- **No emoji** in files unless asked.
+- **No silent constitutional edits.** SOUL.md, USER.md, AGENTS.md
+  change only on explicit request.
+
+## Failure handling
+
+- Tool fails: report the actual error in one line. Don't retry blindly.
+- Memory contradicts reality: trust reality. Update or delete the stale
+  entry.
+- Stuck after two real attempts: say what you tried, what failed, and
+  what you'd try next. Ask before grinding.
 `,
 };
 
@@ -383,14 +464,27 @@ function buildSessionJSONL(session) {
 const WIKI = {
   'index.md': `# Wiki Index
 
-## Entities
-- [stripe](entities/stripe.md) — payments processor; using Connect for marketplace flows
+Catalog of pages. One-line summaries, organized by category. Updated on
+every \`/ingest\` and on every new page filing.
+
+## Projects (first-class anchor entities)
+
+- [podcraft](projects/podcraft.md) — two-sided podcast/sponsor marketplace; Stripe Connect, R2 audio, waveform player
+- [monolith](projects/monolith.md) — shared Rails core: auth, billing, uploads; powers Podcraft and three others
+
+## Entities (people, companies, tools)
+
+- [stripe](entities/stripe.md) — payments processor; Connect for marketplace flows
 - [cloudflare-r2](entities/cloudflare-r2.md) — S3-compatible object store with zero egress
+- [karpathy](entities/karpathy.md) — author of the LLM wiki/Memex pattern
 
-## Concepts
+## Concepts (ideas, frameworks, patterns)
+
 - [two-sided-marketplace](concepts/two-sided-marketplace.md) — chicken-and-egg dynamics
+- [boring-tech](concepts/boring-tech.md) — choose tools by predictability, not novelty
 
-## Sources
+## Sources (ingested articles, threads)
+
 - [karpathy-llm-wiki-pattern](sources/karpathy-llm-wiki-pattern.md) — the foundational gist
 `,
   'log.md': `# Wiki Log
@@ -444,6 +538,153 @@ fail because maintenance was tedious. With an LLM, maintenance is cheap.
 1. Raw sources (immutable).
 2. Wiki (LLM-generated).
 3. Schema/config (human-edited, steers the LLM).
+
+## How this setup uses the pattern
+
+- \`wiki/projects/\` — first-class anchor pages for each active bet
+- \`wiki/entities/\` — people, companies, tools
+- \`wiki/concepts/\` — frameworks, mental models, patterns
+- \`wiki/sources/\` — ingested articles, papers, threads
+- \`wiki/synthesis/\` — cross-cutting essays
+- \`wiki/index.md\` — catalog
+- \`wiki/log.md\` — append-only chronology
+`,
+  'entities/karpathy.md': `# Andrej Karpathy
+
+ML researcher. Author of the LLM Wiki Pattern that grounds this wiki's
+architecture.
+
+## Why he's in this wiki
+
+- Source of the three-layer wiki/Memex system. See
+  [karpathy-llm-wiki-pattern](../sources/karpathy-llm-wiki-pattern.md).
+- The pattern's claim — that LLMs make the bookkeeping cost of a
+  personal knowledge graph finally tractable — is the load-bearing
+  assumption behind the whole \`wiki/\` directory existing.
+`,
+  'concepts/boring-tech.md': `# Boring tech
+
+The principle of choosing tools by predictability rather than novelty.
+Coined as a phrase by Dan McKinley in *Choose Boring Technology* (2015).
+
+## Why this matters
+
+Every novel dependency adds operational surface area: a new failure
+mode, a new monitoring story, a new pager rotation, a new on-call
+runbook. Boring tech amortizes those costs across decades of community
+operation. Postgres has thirty years of bug reports filed and fixed;
+your shiny new database has six months.
+
+## How it shows up here
+
+- Postgres-first for any new persistence need
+- Sidekiq over Redis Streams or Kafka for background work
+- Vanilla server-rendered HTML before reaching for a SPA framework
+`,
+  'projects/podcraft.md': `# Podcraft
+
+**Repo:** \`~/code/podcraft\`
+**State:** alpha, ~12 paying creators
+**Last touched:** today
+
+---
+
+## Elevator pitch
+
+A two-sided marketplace for indie podcasters and their ad sponsors.
+Creators publish episodes and a media kit; sponsors filter, book, and
+pay through Stripe Connect. Platform takes a 10% fee.
+
+## Problem, for whom
+
+Indie podcasters can't sell ads at scale: every potential sponsor wants
+a custom CPM negotiation, a custom audience pitch, a custom contract.
+Time goes to selling, not making episodes. Sponsors face the inverse,
+vetting hundreds of small shows manually.
+
+## Current state
+
+- **Stripe Connect** wired up for split payouts (10% platform fee)
+- **R2 migration** in flight; cuts $340/mo of S3 egress
+- **Waveform player** shipped last week (Wavesurfer.js)
+- **Inbox N+1** flagged, fix queued
+
+## Active bets
+
+- Waveform-first listening UX; engagement signal richer than vanilla
+  audio players
+- 1099-K generation in-house; avoids a Stripe Express upgrade fee
+- Episode-level rather than feed-level ad targeting
+
+## Competitors / adjacent
+
+- **Buzzsprout, Libsyn** — hosting only, no marketplace
+- **Adopter, Podcorn** — marketplace, but creator-vetting heavy
+- **Direct sponsor sales** — what most indie creators do today (slow,
+  manual, single-deal)
+
+## Open strategic questions
+
+- Are 200 active creators and 50 sponsors enough for two-sided
+  liquidity, or do we need 10x that?
+- Do we expand to YouTube creators (different risk: bigger players,
+  AdSense competition) or stay podcast-pure?
+
+## Synthesis with other projects
+
+[monolith](monolith.md) shares the auth and billing layer; could be
+extracted to its own service if Podcraft scale demands it.
+`,
+  'projects/monolith.md': `# Monolith
+
+**Repo:** \`~/code/monolith\`
+**State:** in production, 4 years old
+**Last touched:** ~5 days ago
+
+---
+
+## Elevator pitch
+
+The shared Rails core that powers Podcraft and a handful of internal
+tools. Auth, billing, file uploads, audit log, admin dashboard. Quiet,
+boring, load-bearing.
+
+## Problem, for whom
+
+Internal: every product Alice ships needs the same plumbing — auth,
+billing, file uploads. Building it three times would waste weeks. The
+monolith is the answer: every product is a thin app on top of it.
+
+External: not visible to end users. Pure infra.
+
+## Current state
+
+- Rails 7.2, Postgres, Sidekiq, Redis
+- 4 active products on top
+- ~140k LoC, ~1,200 test cases
+- p99 worker latency 200ms-40s; OTel tracing in flight to find out why
+- Safari login regression open since Tuesday
+
+## Active bets
+
+- **OpenTelemetry** for the background worker; current visibility into
+  job latency is zero
+- **[Postgres-first](../concepts/boring-tech.md)** for any new data:
+  resist Redis, DynamoDB, anything else without strong evidence Postgres
+  can't do it
+- Boring tech: tools chosen by predictability, not novelty
+
+## Open strategic questions
+
+- Should the auth + billing layer be extracted into its own service so
+  Podcraft can be a separate deployment?
+- Migrate Sidekiq to Solid Queue now that Rails 8 is out, or defer
+  until forced?
+
+## Synthesis with other projects
+
+Powers [podcraft](podcraft.md) and three internal tools. Auth and
+billing are the most reused; uploads is podcast-specific in practice.
 `,
 };
 
