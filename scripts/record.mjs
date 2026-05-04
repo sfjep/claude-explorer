@@ -80,30 +80,83 @@ const context = await browser.newContext({
   viewport: VIEWPORT,
   recordVideo: { dir: videoDir, size: VIEWPORT },
 });
+
+// Inject a fake cursor so the WebM has a visible pointer. Playwright fires
+// real DOM mouse events but does not render a cursor; this listens for
+// mousemove/mousedown and animates a styled <div> in response.
+await context.addInitScript(() => {
+  const dot = document.createElement('div');
+  dot.id = '__rec_cursor';
+  dot.style.cssText = `
+    position: fixed; pointer-events: none; z-index: 2147483647;
+    left: 640px; top: 400px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow:
+      0 0 0 2px rgba(184, 168, 255, 1),
+      0 0 0 6px rgba(184, 168, 255, 0.35),
+      0 0 18px rgba(184, 168, 255, 0.6);
+    transform: translate(-50%, -50%);
+    transition: transform 90ms ease;
+  `;
+  const place = () => {
+    if (document.body) document.body.appendChild(dot);
+    else document.addEventListener('DOMContentLoaded', () => document.body.appendChild(dot));
+  };
+  place();
+  window.addEventListener('mousemove', (e) => {
+    dot.style.left = e.clientX + 'px';
+    dot.style.top = e.clientY + 'px';
+  }, true);
+  window.addEventListener('mousedown', () => {
+    dot.style.transform = 'translate(-50%, -50%) scale(0.55)';
+  }, true);
+  window.addEventListener('mouseup', () => {
+    dot.style.transform = 'translate(-50%, -50%)';
+  }, true);
+});
+
 const page = await context.newPage();
 
-console.log('Recording...');
-// Loop is ~7-8s, designed to read well at 12fps.
-await page.goto(`http://localhost:${PORT}/`);
-await sleep(1700);
+// Walk the cursor to a selector, then click. The 30-step move makes the
+// fake cursor traverse smoothly instead of teleporting.
+async function clickAt(selector) {
+  const handle = page.locator(selector).first();
+  await handle.waitFor({ state: 'visible' });
+  const box = await handle.boundingBox();
+  if (!box) throw new Error(`no bounding box for ${selector}`);
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y, { steps: 30 });
+  await sleep(160);
+  await page.mouse.down();
+  await sleep(90);
+  await page.mouse.up();
+}
 
-await page.click('header.topbar nav a[href="/sessions"]');
+console.log('Recording...');
+// Loop is ~8s, designed to read well at 12fps with the visible cursor.
+await page.goto(`http://localhost:${PORT}/`);
+// Park the cursor in the middle so it's visible from frame 1.
+await page.mouse.move(640, 400, { steps: 1 });
 await sleep(1500);
 
-// First session row
-await page.click('table.list tbody tr:first-of-type a');
+await clickAt('header.topbar nav a[href="/sessions"]');
 await sleep(1400);
-await page.evaluate(() => window.scrollBy({ top: 360, behavior: 'smooth' }));
+
+await clickAt('table.list tbody tr:first-of-type a');
+await sleep(1300);
+await page.evaluate(() => window.scrollBy({ top: 380, behavior: 'smooth' }));
 await sleep(1300);
 
 await page.goBack();
 await sleep(500);
-await page.click('header.topbar nav a[href="/projects"]');
-await sleep(1500);
+await clickAt('header.topbar nav a[href="/projects"]');
+await sleep(1400);
 
-// Drill into first project
-await page.click('table.list tbody tr:first-of-type a');
-await sleep(1500);
+await clickAt('table.list tbody tr:first-of-type a');
+await sleep(1600);
 
 await context.close();
 await browser.close();
