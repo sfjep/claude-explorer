@@ -296,16 +296,78 @@ async function discoverWiki() {
   return out;
 }
 
+// Read just enough of a JSONL session to find its title event. Both
+// "ai-title" (aiTitle) and "custom-title" (customTitle) appear early in
+// transcripts, so a 20KB head is plenty.
+async function readSessionTitle(absPath) {
+  return new Promise((resolve) => {
+    const stream = createReadStream(absPath, { encoding: 'utf8', start: 0, end: 20000 });
+    let buf = '';
+    stream.on('data', chunk => { buf += chunk; });
+    stream.on('end', () => {
+      let custom = null, ai = null;
+      for (const line of buf.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const evt = JSON.parse(line);
+          if (evt.type === 'ai-title' && typeof evt.aiTitle === 'string') ai = evt.aiTitle;
+          else if (evt.type === 'custom-title' && typeof evt.customTitle === 'string') custom = evt.customTitle;
+        } catch {}
+      }
+      resolve(ai || custom || null);
+    });
+    stream.on('error', () => resolve(null));
+  });
+}
+
+async function discoverSessions() {
+  const projectsDir = join(HOME, 'projects');
+  const out = [];
+  try {
+    const projDirs = await readdir(projectsDir, { withFileTypes: true });
+    for (const p of projDirs) {
+      if (!p.isDirectory()) continue;
+      if (isHidden(`projects/${p.name}`)) continue;
+      const projDir = join(projectsDir, p.name);
+      let entries;
+      try { entries = await readdir(projDir, { withFileTypes: true }); } catch { continue; }
+      for (const e of entries) {
+        if (!e.isFile() || !e.name.endsWith('.jsonl')) continue;
+        const abs = join(projDir, e.name);
+        try {
+          const s = await stat(abs);
+          out.push({
+            id: e.name.replace(/\.jsonl$/, ''),
+            projectSlug: p.name,
+            decodedPath: decodeProjectSlug(p.name),
+            size: s.size,
+            mtime: s.mtimeMs,
+            title: null, // populated below for the most-recent slice
+          });
+        } catch {}
+      }
+    }
+  } catch {}
+  out.sort((a, b) => b.mtime - a.mtime);
+  // Read titles only for the most recent 60 sessions to keep discovery cheap.
+  const TITLE_FETCH = 60;
+  await Promise.all(out.slice(0, TITLE_FETCH).map(async (s) => {
+    s.title = await readSessionTitle(join(projectsDir, s.projectSlug, s.id + '.jsonl'));
+  }));
+  return out;
+}
+
 async function discover() {
-  const [instructions, projects, plans, plugins, skills, wiki] = await Promise.all([
+  const [instructions, projects, sessions, plans, plugins, skills, wiki] = await Promise.all([
     discoverInstructions(),
     discoverProjects(),
+    discoverSessions(),
     discoverPlans(),
     discoverPlugins(),
     discoverSkills(),
     discoverWiki(),
   ]);
-  return { instructions, projects, plans, plugins, skills, wiki };
+  return { instructions, projects, sessions, plans, plugins, skills, wiki };
 }
 
 // ---------------------------------------------------------------------------
@@ -315,6 +377,7 @@ function availableTabs(nav) {
   const tabs = [];
   if (nav.instructions.files.length > 0) tabs.push({ slug: 'instructions', label: 'Instructions' });
   if (nav.projects.length > 0) tabs.push({ slug: 'projects', label: 'Projects' });
+  if (nav.sessions && nav.sessions.length > 0) tabs.push({ slug: 'sessions', label: 'Sessions' });
   if (nav.skills.length > 0) tabs.push({ slug: 'skills', label: 'Skills' });
   if (nav.plans.length > 0) tabs.push({ slug: 'plans', label: 'Plans' });
   if (nav.plugins.length > 0) tabs.push({ slug: 'plugins', label: 'Plugins' });
@@ -878,6 +941,15 @@ function homePage(nav) {
   </div>
 </section>`);
   }
+  if (nav.sessions && nav.sessions.length > 0) {
+    sections.push(`
+<section class="row">
+  <div class="row__head"><h2>Recent sessions</h2><a class="row__more" href="/sessions">See all ${nav.sessions.length}</a></div>
+  <div class="card-grid">
+    ${nav.sessions.slice(0, 6).map(s => `<a class="card" href="/projects/${s.projectSlug}/sessions/${s.id}"><h4>${escapeHtml(s.title || '<untitled>')}</h4><p>${escapeHtml(s.decodedPath)}</p><div class="meta">${fmtDate(s.mtime)} · ${fmtSize(s.size)}</div></a>`).join('')}
+  </div>
+</section>`);
+  }
   if (nav.skills.length > 0) {
     sections.push(`
 <section class="row">
@@ -1005,6 +1077,26 @@ async function projectDetail(slug, nav) {
 </div>
 ${memoryHTML}
 ${sessionsHTML}
+`;
+}
+
+function sessionsIndex(nav) {
+  const rows = nav.sessions.map(s => `<tr>
+    <td><a href="/projects/${s.projectSlug}/sessions/${s.id}">${escapeHtml(s.title || '<untitled>')}</a></td>
+    <td><a href="/projects/${s.projectSlug}" style="color:var(--text-muted);">${escapeHtml(s.decodedPath)}</a></td>
+    <td class="num"><code>${s.id.slice(0, 8)}</code></td>
+    <td class="num">${fmtSize(s.size)}</td>
+    <td class="when">${fmtDate(s.mtime)}</td>
+  </tr>`).join('');
+  return `
+<div class="hero">
+  <h1>Sessions</h1>
+  <p>Every Claude Code conversation transcript across all projects, sorted by most recent. ${nav.sessions.length} session${nav.sessions.length === 1 ? '' : 's'}.</p>
+</div>
+<table class="list">
+<thead><tr><th>Title</th><th>Project</th><th class="num">ID</th><th class="num">Size</th><th class="when">Modified</th></tr></thead>
+<tbody>${rows}</tbody>
+</table>
 `;
 }
 
@@ -1163,6 +1255,14 @@ async function handleRequest(req) {
       });
     }
     return notFound('projects');
+  }
+
+  // Sessions (global, across all projects)
+  if (head === 'sessions') {
+    if (rest.length === 0) {
+      return html(200, sessionsIndex(nav), { title: 'Sessions', section: 'sessions', wide: true });
+    }
+    return notFound('sessions');
   }
 
   // Skills
