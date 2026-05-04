@@ -15,9 +15,11 @@ import { marked } from 'marked';
 const HOME = process.env.CLAUDE_HOME || join(homedir(), '.claude');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4567;
 
-// Defaults the user can override via claude-explorer.config.json at $CLAUDE_HOME.
+// Defaults the user can extend via claude-explorer.config.json at $CLAUDE_HOME.
+// This tool is single-user, runs on localhost. The defaults below are about
+// hiding credentials and noise (caches, telemetry, internals), not about
+// shielding personal files. The user wrote those — they're allowed to read them.
 const DEFAULT_HIDE = [
-  'USER.md',                  // privacy: working model of the user
   '.credentials*',
   '*.bak',
   '*.bak.*',

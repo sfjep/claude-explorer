@@ -76,19 +76,21 @@ Tabs only appear if the corresponding content exists.
 
 ## Privacy
 
-This tool reads files some users keep private. Two layers of protection:
+The server binds `127.0.0.1` only. It is not reachable from your network
+without explicit reconfiguration.
 
-1. **Localhost only.** The server binds `127.0.0.1`. It is not reachable
-   from your network without explicit reconfiguration.
-2. **Default hides.** Files commonly containing secrets or noise are
-   hidden by default: `USER.md`, `.credentials*`, `*.bak`, and the
-   `cache/`, `debug/`, `telemetry/`, `shell-snapshots/`, `paste-cache/`,
-   `session-env/`, `downloads/`, `file-history/`, `backups/` directories.
-   Override the entire list (or extend it) via the config file.
+Defaults hide credentials and noise (caches, telemetry, internals) so they
+don't clutter the UI: `.credentials*`, `*.bak`, plus the `cache/`,
+`debug/`, `telemetry/`, `shell-snapshots/`, `paste-cache/`, `session-env/`,
+`downloads/`, `file-history/`, `backups/` directories. Personal markdown
+files like USER.md are *not* hidden by default; this tool is single-user,
+and you wrote them for yourself.
 
-There is also a `?view=safe` query string for screenshare scenarios; it
-shows a "safe view" badge in the topbar. (Programmatic per-file `private`
-flags are reserved for a future release.)
+Add more patterns via the config file's `hide` field if you want.
+
+A `?view=safe` query string toggles a "safe view" badge in the topbar,
+intended as a future hook for screen-share scenarios where you want to
+hide additional content.
 
 ## What's not here yet (v0.2)
 
