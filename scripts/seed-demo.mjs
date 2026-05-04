@@ -168,8 +168,10 @@ All database access through Drizzle ORM. No raw SQL queries.
         userPrompt: "I want OTel spans on the background worker. We're flying blind on job latency.",
       },
       {
+        // Intentionally no ai-title: exercises the "first user message"
+        // fallback that real, short Claude Code sessions rely on.
         id: 'a7b8c9d0-7777-4888-9999-aaaaaaaaaaaa',
-        title: 'Untitled session',
+        title: null,
         ageDays: 9.5,
         turns: 6,
         userPrompt: "Quick: how do I check what's on port 5432?",
@@ -360,7 +362,9 @@ function buildSessionJSONL(session) {
   const startMs = Date.now() - session.ageDays * 86400_000;
   const lines = [];
   lines.push(JSON.stringify({ type: 'permission-mode', permissionMode: 'auto', sessionId: session.id }));
-  lines.push(JSON.stringify({ type: 'ai-title', aiTitle: session.title, sessionId: session.id }));
+  if (session.title) {
+    lines.push(JSON.stringify({ type: 'ai-title', aiTitle: session.title, sessionId: session.id }));
+  }
   let prev = null;
   for (let i = 0; i < session.turns; i++) {
     const ts = new Date(startMs + i * 12000).toISOString();
