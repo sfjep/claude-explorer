@@ -607,7 +607,77 @@ function fmtTokens(n) {
   if (!n) return '0';
   if (n < 10_000) return n.toLocaleString('en-US');
   if (n < 1_000_000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-  return (n / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
+  if (n < 1_000_000_000) return (n / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
+  return (n / 1_000_000_000).toFixed(2).replace(/\.?0+$/, '') + 'B';
+}
+
+// In-memory cache of usage totals per JSONL session, keyed by path+mtime so
+// it auto-invalidates when Claude appends turns to an active session.
+const _usageCache = new Map();
+
+function emptyUsage() {
+  return { turns: 0, input: 0, output: 0, cacheCreate: 0, cacheRead: 0, model: null };
+}
+
+function totalIn(u) {
+  return (u.input || 0) + (u.cacheCreate || 0) + (u.cacheRead || 0);
+}
+
+function addUsage(target, src) {
+  target.turns += src.turns;
+  target.input += src.input;
+  target.output += src.output;
+  target.cacheCreate += src.cacheCreate;
+  target.cacheRead += src.cacheRead;
+  if (!target.model && src.model) target.model = src.model;
+  return target;
+}
+
+// Stream a JSONL session, sum the usage object on every assistant event.
+// Discards everything else, keeping memory O(1) regardless of file size.
+async function getSessionUsage(absPath, mtime) {
+  const key = `${absPath}:${mtime}`;
+  if (_usageCache.has(key)) return _usageCache.get(key);
+  const usage = emptyUsage();
+  try {
+    const stream = createReadStream(absPath, { encoding: 'utf8' });
+    const rl = createInterface({ input: stream, crlfDelay: Infinity });
+    for await (const line of rl) {
+      if (!line || !line.trim()) continue;
+      let evt;
+      try { evt = JSON.parse(line); } catch { continue; }
+      if (!evt || evt.type !== 'assistant') continue;
+      const u = evt.message && evt.message.usage;
+      if (!u) continue;
+      usage.turns++;
+      usage.input += u.input_tokens || 0;
+      usage.output += u.output_tokens || 0;
+      usage.cacheCreate += u.cache_creation_input_tokens || 0;
+      usage.cacheRead += u.cache_read_input_tokens || 0;
+      if (!usage.model && evt.message.model) usage.model = evt.message.model;
+    }
+  } catch {}
+  _usageCache.set(key, usage);
+  return usage;
+}
+
+// Fan out getSessionUsage across many sessions in parallel. Mutates each
+// session in place to add `.usage`. Idempotent thanks to the cache.
+async function attachSessionUsage(sessions) {
+  await Promise.all(sessions.map(async (s) => {
+    if (s.usage) return;
+    const abs = join(HOME, 'projects', s.projectSlug, s.id + '.jsonl');
+    s.usage = await getSessionUsage(abs, s.mtime);
+  }));
+}
+
+// Sum usage across every session belonging to a given project slug.
+function aggregateProjectUsage(projectSlug, sessions) {
+  const acc = emptyUsage();
+  for (const s of sessions) {
+    if (s.projectSlug === projectSlug && s.usage) addUsage(acc, s.usage);
+  }
+  return acc;
 }
 
 function renderUsageCard(usage) {
@@ -1059,16 +1129,26 @@ ${importHTML}
 }
 
 function projectsIndex(nav) {
+  const rows = nav.projects.map(p => {
+    const u = aggregateProjectUsage(p.slug, nav.sessions);
+    return `<tr>
+    <td><a href="/projects/${p.slug}">${escapeHtml(p.decodedPath)}</a></td>
+    <td class="num">${p.sessionCount}</td>
+    <td class="num">${p.memoryCount}</td>
+    <td class="num">${u.turns || '—'}</td>
+    <td class="num">${u.input || u.cacheCreate || u.cacheRead ? fmtTokens(totalIn(u)) : '—'}</td>
+    <td class="num">${u.output ? fmtTokens(u.output) : '—'}</td>
+    <td class="when">${fmtDate(p.lastTouched)}</td>
+  </tr>`;
+  }).join('');
   return `
 <div class="hero">
   <h1>Projects</h1>
   <p>Per-project memory, session transcripts, and history. One folder under <code>~/.claude/projects/</code> per working directory you've used Claude Code in.</p>
 </div>
 <table class="list">
-<thead><tr><th>Path</th><th class="num">Sessions</th><th class="num">Memory</th><th class="when">Last touched</th></tr></thead>
-<tbody>
-${nav.projects.map(p => `<tr><td><a href="/projects/${p.slug}">${escapeHtml(p.decodedPath)}</a></td><td class="num">${p.sessionCount}</td><td class="num">${p.memoryCount}</td><td class="when">${fmtDate(p.lastTouched)}</td></tr>`).join('')}
-</tbody>
+<thead><tr><th>Path</th><th class="num">Sessions</th><th class="num">Memory</th><th class="num">Turns</th><th class="num">In</th><th class="num">Out</th><th class="when">Last touched</th></tr></thead>
+<tbody>${rows}</tbody>
 </table>
 `;
 }
@@ -1129,20 +1209,44 @@ ${sessionsHTML}
 }
 
 function sessionsIndex(nav) {
-  const rows = nav.sessions.map(s => `<tr>
+  const grandTotal = emptyUsage();
+  for (const s of nav.sessions) if (s.usage) addUsage(grandTotal, s.usage);
+
+  const rows = nav.sessions.map(s => {
+    const u = s.usage || emptyUsage();
+    return `<tr>
     <td><a href="/projects/${s.projectSlug}/sessions/${s.id}">${escapeHtml(s.title || '<untitled>')}</a></td>
     <td><a href="/projects/${s.projectSlug}" style="color:var(--text-muted);">${escapeHtml(s.decodedPath)}</a></td>
-    <td class="num"><code>${s.id.slice(0, 8)}</code></td>
+    <td class="num">${u.turns ? u.turns : '—'}</td>
+    <td class="num">${u.input || u.cacheCreate || u.cacheRead ? fmtTokens(totalIn(u)) : '—'}</td>
+    <td class="num">${u.output ? fmtTokens(u.output) : '—'}</td>
     <td class="num">${fmtSize(s.size)}</td>
     <td class="when">${fmtDate(s.mtime)}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
+
+  const totalsBanner = grandTotal.turns ? `
+<div class="usage-card">
+  <div class="usage-card__head">All sessions</div>
+  <div class="usage-card__grid">
+    <div><div class="usage-card__label">sessions</div><div class="usage-card__num">${nav.sessions.length}</div></div>
+    <div><div class="usage-card__label">turns</div><div class="usage-card__num">${fmtTokens(grandTotal.turns)}</div></div>
+    <div><div class="usage-card__label">input</div><div class="usage-card__num">${fmtTokens(grandTotal.input)}</div></div>
+    <div><div class="usage-card__label">output</div><div class="usage-card__num">${fmtTokens(grandTotal.output)}</div></div>
+    <div><div class="usage-card__label">cache write</div><div class="usage-card__num">${fmtTokens(grandTotal.cacheCreate)}</div></div>
+    <div><div class="usage-card__label">cache read</div><div class="usage-card__num">${fmtTokens(grandTotal.cacheRead)}</div></div>
+    <div><div class="usage-card__label">total in</div><div class="usage-card__num">${fmtTokens(totalIn(grandTotal))}</div></div>
+  </div>
+</div>` : '';
+
   return `
 <div class="hero">
   <h1>Sessions</h1>
-  <p>Every Claude Code conversation transcript across all projects, sorted by most recent. ${nav.sessions.length} session${nav.sessions.length === 1 ? '' : 's'}.</p>
+  <p>Every Claude Code conversation transcript across all projects, sorted by most recent.</p>
 </div>
+${totalsBanner}
 <table class="list">
-<thead><tr><th>Title</th><th>Project</th><th class="num">ID</th><th class="num">Size</th><th class="when">Modified</th></tr></thead>
+<thead><tr><th>Title</th><th>Project</th><th class="num">Turns</th><th class="num">In</th><th class="num">Out</th><th class="num">Size</th><th class="when">Modified</th></tr></thead>
 <tbody>${rows}</tbody>
 </table>
 `;
@@ -1256,6 +1360,7 @@ async function handleRequest(req) {
   // Projects
   if (head === 'projects') {
     if (rest.length === 0) {
+      await attachSessionUsage(nav.sessions);
       return html(200, projectsIndex(nav), { title: 'Projects', section: 'projects', wide: true });
     }
     const slug = rest[0];
@@ -1308,6 +1413,7 @@ async function handleRequest(req) {
   // Sessions (global, across all projects)
   if (head === 'sessions') {
     if (rest.length === 0) {
+      await attachSessionUsage(nav.sessions);
       return html(200, sessionsIndex(nav), { title: 'Sessions', section: 'sessions', wide: true });
     }
     return notFound('sessions');
