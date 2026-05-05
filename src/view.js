@@ -95,9 +95,37 @@ ${topbarHTML(section || 'home', tabs, safeMode)}
   ${sidebar}
   <main class="${mainClass}">${crumbHTML}${content}</main>
 </div>
+<script>${EXPAND_SCRIPT}</script>
 </body>
 </html>`;
 }
+
+const EXPAND_SCRIPT = `
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.evt-expand');
+  if (!btn) return;
+  const group = btn.closest('[data-uuid]');
+  if (!group) return;
+  const uuid = group.dataset.uuid;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+  try {
+    const url = location.pathname.replace(/\\/+$/, '') + '/event/' + encodeURIComponent(uuid);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(res.status);
+    const html = await res.text();
+    if (!html) throw new Error('empty');
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const fresh = tmp.firstElementChild;
+    if (fresh) group.replaceWith(fresh);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = original + ' (retry)';
+  }
+});
+`;
 
 // ---------------------------------------------------------------------------
 // Reusable widgets
@@ -126,7 +154,7 @@ export function homePage(nav) {
     sections.push(`<section class="row">
   <div class="row__head"><h2>Instructions</h2><a class="row__more" href="/instructions">See all</a></div>
   <div class="card-grid">
-    ${nav.instructions.files.slice(0, 6).map(f => `<a class="card" href="/instructions/${f.slug}"><h4>${escapeHtml(f.file)}</h4><p>${escapeHtml(f.blurb || 'Open file.')}</p></a>`).join('')}
+    ${nav.instructions.files.slice(0, 6).map(f => `<a class="card" href="/instructions/${f.slug}" title="${escapeHtml(f.file)}"><h4>${escapeHtml(f.file)}</h4><p>${escapeHtml(f.blurb || 'Open file.')}</p></a>`).join('')}
   </div>
 </section>`);
   }
@@ -134,7 +162,7 @@ export function homePage(nav) {
     sections.push(`<section class="row">
   <div class="row__head"><h2>Projects</h2><a class="row__more" href="/projects">See all</a></div>
   <div class="card-grid">
-    ${nav.projects.slice(0, 8).map(p => `<a class="card" href="/projects/${p.slug}"><h4>${escapeHtml(p.decodedPath)}</h4><p>${p.sessionCount} session${p.sessionCount === 1 ? '' : 's'}, ${p.memoryCount} memor${p.memoryCount === 1 ? 'y' : 'ies'}</p><div class="meta">${fmtDate(p.lastTouched)}</div></a>`).join('')}
+    ${nav.projects.slice(0, 8).map(p => `<a class="card" href="/projects/${p.slug}" title="${escapeHtml(p.decodedPath)}"><h4>${escapeHtml(p.decodedPath)}</h4><p>${p.sessionCount} session${p.sessionCount === 1 ? '' : 's'}, ${p.memoryCount} memor${p.memoryCount === 1 ? 'y' : 'ies'}</p><div class="meta">${fmtDate(p.lastTouched)}</div></a>`).join('')}
   </div>
 </section>`);
   }
@@ -142,7 +170,7 @@ export function homePage(nav) {
     sections.push(`<section class="row">
   <div class="row__head"><h2>Recent sessions</h2><a class="row__more" href="/sessions">See all ${nav.sessions.length}</a></div>
   <div class="card-grid">
-    ${nav.sessions.slice(0, 6).map(s => `<a class="card" href="/projects/${s.projectSlug}/sessions/${s.id}"><h4>${escapeHtml(s.title || '<untitled>')}</h4><p>${escapeHtml(s.decodedPath)}</p><div class="meta">${fmtDate(s.mtime)} · ${fmtSize(s.size)}</div></a>`).join('')}
+    ${nav.sessions.slice(0, 6).map(s => `<a class="card" href="/projects/${s.projectSlug}/sessions/${s.id}" title="${escapeHtml(s.title || '<untitled>')}"><h4>${escapeHtml(s.title || '<untitled>')}</h4><p>${escapeHtml(s.decodedPath)}</p><div class="meta">${fmtDate(s.mtime)} · ${fmtSize(s.size)}</div></a>`).join('')}
   </div>
 </section>`);
   }
@@ -150,7 +178,7 @@ export function homePage(nav) {
     sections.push(`<section class="row">
   <div class="row__head"><h2>Skills</h2><a class="row__more" href="/skills">See all</a></div>
   <div class="card-grid">
-    ${nav.skills.slice(0, 8).map(s => `<a class="card" href="/skills/${s.slug}"><h4>${escapeHtml(s.slug)}</h4><p>${escapeHtml((s.description || 'Slash command').slice(0, 100))}</p></a>`).join('')}
+    ${nav.skills.slice(0, 8).map(s => `<a class="card" href="/skills/${s.slug}" title="${escapeHtml(s.slug)}"><h4>${escapeHtml(s.slug)}</h4><p>${escapeHtml((s.description || 'Slash command').slice(0, 100))}</p></a>`).join('')}
   </div>
 </section>`);
   }
@@ -158,7 +186,7 @@ export function homePage(nav) {
     sections.push(`<section class="row">
   <div class="row__head"><h2>Plans</h2><a class="row__more" href="/plans">See all</a></div>
   <div class="card-grid">
-    ${nav.plans.slice(0, 6).map(p => `<a class="card" href="/plans/${p.slug}"><h4>${escapeHtml(p.slug)}</h4><p>${escapeHtml((p.blurb || 'Plan').slice(0, 100))}</p><div class="meta">${fmtDate(p.mtime)}</div></a>`).join('')}
+    ${nav.plans.slice(0, 6).map(p => `<a class="card" href="/plans/${p.slug}" title="${escapeHtml(p.slug)}"><h4>${escapeHtml(p.slug)}</h4><p>${escapeHtml((p.blurb || 'Plan').slice(0, 100))}</p><div class="meta">${fmtDate(p.mtime)}</div></a>`).join('')}
   </div>
 </section>`);
   }
@@ -195,7 +223,7 @@ export function instructionsIndex(nav) {
 </div>
 ${importHTML}
 <div class="card-grid">
-  ${nav.instructions.files.map(f => `<a class="card" href="/instructions/${f.slug}"><h4>${escapeHtml(f.file)}</h4><p>${escapeHtml(f.blurb || 'Open file.')}</p></a>`).join('')}
+  ${nav.instructions.files.map(f => `<a class="card" href="/instructions/${f.slug}" title="${escapeHtml(f.file)}"><h4>${escapeHtml(f.file)}</h4><p>${escapeHtml(f.blurb || 'Open file.')}</p></a>`).join('')}
 </div>`;
 }
 
@@ -246,7 +274,7 @@ export async function projectDetail(slug, nav) {
       memoryHTML += `<h3>All memory files</h3><div class="card-grid">`;
       for (const f of otherFiles) {
         const blurb = (await pageBlurb(join(memoryDir, f), 110)) || '';
-        memoryHTML += `<a class="card" href="/projects/${slug}/memory/${f.replace(/\.md$/, '')}"><h4>${escapeHtml(f)}</h4><p>${escapeHtml(blurb)}</p></a>`;
+        memoryHTML += `<a class="card" href="/projects/${slug}/memory/${f.replace(/\.md$/, '')}" title="${escapeHtml(f)}"><h4>${escapeHtml(f)}</h4><p>${escapeHtml(blurb)}</p></a>`;
       }
       memoryHTML += `</div>`;
     }
@@ -337,7 +365,7 @@ export function pluginsIndex(nav) {
   <p>Installed Claude Code plugins from <code>~/.claude/plugins/installed_plugins.json</code>.</p>
 </div>
 <div class="card-grid">
-${nav.plugins.map(p => `<a class="card" href="/plugins/${encodeURIComponent(p.name)}"><h4>${escapeHtml(p.name.split('@')[0])}</h4><p>${escapeHtml(p.name.includes('@') ? p.name.split('@')[1] : '')}</p><div class="meta">${escapeHtml(p.scope)} · ${escapeHtml(p.version)}</div></a>`).join('')}
+${nav.plugins.map(p => `<a class="card" href="/plugins/${encodeURIComponent(p.name)}" title="${escapeHtml(p.name)}"><h4>${escapeHtml(p.name.split('@')[0])}</h4><p>${escapeHtml(p.name.includes('@') ? p.name.split('@')[1] : '')}</p><div class="meta">${escapeHtml(p.scope)} · ${escapeHtml(p.version)}</div></a>`).join('')}
 </div>`;
 }
 
@@ -363,6 +391,6 @@ export function skillsIndex(nav) {
   <p>Slash commands available in every session. Defined in <code>~/.claude/skills/</code>.</p>
 </div>
 <div class="card-grid">
-  ${nav.skills.map(s => `<a class="card" href="/skills/${s.slug}"><h4>${escapeHtml(s.slug)}</h4><p>${escapeHtml((s.description || 'Open SKILL.md').slice(0, 140))}</p></a>`).join('')}
+  ${nav.skills.map(s => `<a class="card" href="/skills/${s.slug}" title="${escapeHtml(s.slug)}"><h4>${escapeHtml(s.slug)}</h4><p>${escapeHtml((s.description || 'Open SKILL.md').slice(0, 140))}</p></a>`).join('')}
 </div>`;
 }

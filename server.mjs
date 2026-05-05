@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { HOME, PORT, CONFIG, escapeHtml, fmtSize, fmtDate } from './src/util.js';
 import { renderMarkdown, pageBlurb, pageTitle } from './src/markdown.js';
 import { discover } from './src/discover.js';
-import { renderSession, attachSessionUsage } from './src/session.js';
+import { renderSession, attachSessionUsage, renderSingleEventByUuid } from './src/session.js';
 import {
   shell,
   homePage,
@@ -126,6 +126,11 @@ async function routeProjects(rest, nav, limit, html, notFound) {
     const sessionId = rest[2];
     const abs = join(HOME, 'projects', slug, sessionId + '.jsonl');
     if (!existsSync(abs)) return notFound('projects');
+    if (rest.length === 5 && rest[3] === 'event') {
+      const uuid = rest[4];
+      const eventHTML = await renderSingleEventByUuid(abs, uuid);
+      return { status: eventHTML ? 200 : 404, body: eventHTML };
+    }
     let sessionMeta = '';
     try {
       const s = await stat(abs);

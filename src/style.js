@@ -195,8 +195,8 @@ section.row { margin-bottom: 3rem; }
   color: inherit;
 }
 .card:hover { border-color: var(--accent); transform: translateY(-1px); background: var(--bg-raised); color: inherit; }
-.card h4 { color: var(--heading); margin: 0 0 0.35rem; font-size: 0.95rem; font-weight: 600; }
-.card p { color: var(--text-muted); font-size: 0.85rem; margin: 0; line-height: 1.55; }
+.card h4 { color: var(--heading); margin: 0 0 0.35rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card p { color: var(--text-muted); font-size: 0.85rem; margin: 0; line-height: 1.55; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .card .meta { color: var(--text-dim); font-size: 0.75rem; margin-top: 0.6rem; font-family: ui-monospace, monospace; }
 
 .import-tree { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0 2rem; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.85rem; }
@@ -239,4 +239,21 @@ details.evt summary { cursor: pointer; font-size: 0.8rem; color: var(--text-mute
 details.evt summary:hover { color: var(--text); }
 details.evt[open] summary { margin-bottom: 0.5rem; }
 details.evt pre { font-size: 0.8em; }
+
+.evt__truncated { color: var(--text-dim); font-size: 0.8rem; margin: 0.5rem 0 0; font-family: ui-monospace, monospace; }
+.evt-expand {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--link);
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: border-color 120ms, color 120ms;
+}
+.evt-expand:hover { border-color: var(--accent); color: var(--link-hover); }
+.evt-expand[disabled] { opacity: 0.6; cursor: progress; }
 `;

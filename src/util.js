@@ -106,11 +106,6 @@ export const MAX_TOOL_INPUT = 1500;
 export const MAX_TOOL_RESULT = 1200;
 export const MAX_BUFFER_HARD_CAP = 2000;
 
-export function capText(s, cap) {
-  if (!s) return '';
-  return s.length > cap ? s.slice(0, cap) + '\n\n[... truncated, full text in raw JSONL]' : s;
-}
-
 // Filter Claude Code's CLI plumbing wrappers from user messages.
 export function stripCommandWrappers(text) {
   return text

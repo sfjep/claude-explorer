@@ -13,10 +13,36 @@ import {
   MAX_TOOL_INPUT,
   MAX_TOOL_RESULT,
   MAX_BUFFER_HARD_CAP,
-  capText,
   escapeHtml,
   stripCommandWrappers,
 } from './util.js';
+
+const DEFAULT_OPTS = Object.freeze({
+  caps: { text: MAX_TEXT_BLOCK, thinking: MAX_THINKING, toolInput: MAX_TOOL_INPUT, toolResult: MAX_TOOL_RESULT },
+  openDetails: false,
+});
+const FULL_OPTS = Object.freeze({
+  caps: { text: Infinity, thinking: Infinity, toolInput: Infinity, toolResult: Infinity },
+  openDetails: true,
+});
+
+function detailsTag(opts) {
+  return opts.openDetails ? '<details open' : '<details';
+}
+
+function cap(s, max) {
+  if (!s) return { s: '', truncated: false };
+  if (s.length > max) return { s: s.slice(0, max), truncated: true };
+  return { s, truncated: false };
+}
+
+function expandBtn(truncated) {
+  return truncated ? '<button type="button" class="evt-expand">Show full</button>' : '';
+}
+
+function truncMarker(truncated) {
+  return truncated ? '<p class="evt__truncated">[... truncated]</p>' : '';
+}
 
 // ---------------------------------------------------------------------------
 // Usage aggregation
@@ -94,7 +120,8 @@ export function aggregateProjectUsage(projectSlug, sessions) {
 // ---------------------------------------------------------------------------
 // Per-event rendering
 // ---------------------------------------------------------------------------
-function renderUserEvent(evt, meta) {
+function renderUserEvent(evt, meta, opts) {
+  const { caps } = opts;
   const content = evt.message && evt.message.content;
   let textParts = [];
   let toolResults = [];
@@ -113,50 +140,84 @@ function renderUserEvent(evt, meta) {
   }
   let html = '';
   if (textParts.length > 0) {
-    const combined = capText(textParts.join('\n\n'), MAX_TEXT_BLOCK);
-    html += `<div class="evt evt--user">${meta}<div class="evt__role">user</div><div class="evt__body">${marked.parse(combined)}</div></div>`;
+    const { s, truncated } = cap(textParts.join('\n\n'), caps.text);
+    html += `<div class="evt evt--user">${meta}<div class="evt__role">user</div><div class="evt__body">${marked.parse(s)}${truncMarker(truncated)}</div>${expandBtn(truncated)}</div>`;
   }
   for (const tr of toolResults) {
     const summary = typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content);
-    const trimmed = summary.length > MAX_TOOL_RESULT ? summary.slice(0, MAX_TOOL_RESULT) + '\n\n[truncated]' : summary;
-    html += `<details class="evt evt--tool-result"><summary><span class="evt__role">tool result</span> <span class="evt__tag">${escapeHtml(tr.tool_use_id || '').slice(-8)}</span></summary><pre>${escapeHtml(trimmed)}</pre></details>`;
+    const { s, truncated } = cap(summary, caps.toolResult);
+    html += `${detailsTag(opts)} class="evt evt--tool-result"><summary><span class="evt__role">tool result</span> <span class="evt__tag">${escapeHtml(tr.tool_use_id || '').slice(-8)}</span></summary><pre>${escapeHtml(s)}${truncated ? '\n\n[... truncated]' : ''}</pre>${expandBtn(truncated)}</details>`;
   }
   return html;
 }
 
-function renderAssistantEvent(evt, meta) {
+function renderAssistantEvent(evt, meta, opts) {
+  const { caps } = opts;
   const content = evt.message && evt.message.content;
   if (!Array.isArray(content)) return '';
   let html = '';
   for (const c of content) {
     if (c.type === 'text') {
-      const text = capText(c.text || '', MAX_TEXT_BLOCK);
-      html += `<div class="evt evt--assistant">${meta}<div class="evt__role">assistant</div><div class="evt__body">${marked.parse(text)}</div></div>`;
+      const { s, truncated } = cap(c.text || '', caps.text);
+      html += `<div class="evt evt--assistant">${meta}<div class="evt__role">assistant</div><div class="evt__body">${marked.parse(s)}${truncMarker(truncated)}</div>${expandBtn(truncated)}</div>`;
     } else if (c.type === 'thinking') {
-      const text = capText(c.thinking || c.text || '', MAX_THINKING);
-      html += `<details class="evt evt--thinking"><summary><span class="evt__role">thinking</span></summary><div class="evt__body">${marked.parse(text)}</div></details>`;
+      const { s, truncated } = cap(c.thinking || c.text || '', caps.thinking);
+      html += `${detailsTag(opts)} class="evt evt--thinking"><summary><span class="evt__role">thinking</span></summary><div class="evt__body">${marked.parse(s)}${truncMarker(truncated)}</div>${expandBtn(truncated)}</details>`;
     } else if (c.type === 'tool_use') {
       const inp = JSON.stringify(c.input || {}, null, 2);
-      const inpTrimmed = inp.length > MAX_TOOL_INPUT ? inp.slice(0, MAX_TOOL_INPUT) + '\n[truncated]' : inp;
-      html += `<details class="evt evt--tool-use"><summary><span class="evt__role">tool</span> <code>${escapeHtml(c.name || '?')}</code></summary><pre>${escapeHtml(inpTrimmed)}</pre></details>`;
+      const { s, truncated } = cap(inp, caps.toolInput);
+      html += `${detailsTag(opts)} class="evt evt--tool-use"><summary><span class="evt__role">tool</span> <code>${escapeHtml(c.name || '?')}</code></summary><pre>${escapeHtml(s)}${truncated ? '\n[... truncated]' : ''}</pre>${expandBtn(truncated)}</details>`;
     }
   }
   return html;
 }
 
-function renderSystemEvent(evt, meta) {
+function renderSystemEvent(evt, meta, opts) {
+  const { caps } = opts;
   const stripped = stripCommandWrappers(evt.content || '');
   if (!stripped) return '';
-  return `<div class="evt evt--system">${meta}<pre>${escapeHtml(capText(stripped, MAX_TEXT_BLOCK))}</pre></div>`;
+  const { s, truncated } = cap(stripped, caps.text);
+  return `<div class="evt evt--system">${meta}<pre>${escapeHtml(s)}${truncated ? '\n\n[... truncated]' : ''}</pre>${expandBtn(truncated)}</div>`;
 }
 
-function renderSessionEvent(evt) {
+function renderEventBlocks(evt, opts) {
   if (!RENDERED_TYPES.has(evt.type)) return '';
   const ts = evt.timestamp ? new Date(evt.timestamp).toLocaleString() : '';
   const meta = `<div class="evt__meta">${escapeHtml(ts)}</div>`;
-  if (evt.type === 'system') return renderSystemEvent(evt, meta);
-  if (evt.type === 'user') return renderUserEvent(evt, meta);
-  if (evt.type === 'assistant') return renderAssistantEvent(evt, meta);
+  if (evt.type === 'system') return renderSystemEvent(evt, meta, opts);
+  if (evt.type === 'user') return renderUserEvent(evt, meta, opts);
+  if (evt.type === 'assistant') return renderAssistantEvent(evt, meta, opts);
+  return '';
+}
+
+function wrapEvent(evt, blocksHTML) {
+  if (!blocksHTML) return '';
+  if (!evt.uuid) return blocksHTML;
+  return `<div class="evt-group" data-uuid="${escapeHtml(evt.uuid)}">${blocksHTML}</div>`;
+}
+
+function renderSessionEvent(evt, opts = DEFAULT_OPTS) {
+  return wrapEvent(evt, renderEventBlocks(evt, opts));
+}
+
+// Re-render a single event by uuid with no truncation. Streams the JSONL,
+// stops at the first match. Returns the .evt-group HTML (or '' if not found).
+export async function renderSingleEventByUuid(absPath, uuid) {
+  if (!uuid) return '';
+  const stream = createReadStream(absPath, { encoding: 'utf8' });
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+  try {
+    for await (const line of rl) {
+      if (!line || !line.trim()) continue;
+      let evt;
+      try { evt = JSON.parse(line); } catch { continue; }
+      if (!evt || evt.uuid !== uuid) continue;
+      const html = wrapEvent(evt, renderEventBlocks(evt, FULL_OPTS));
+      rl.close();
+      stream.destroy();
+      return html;
+    }
+  } catch {}
   return '';
 }
 

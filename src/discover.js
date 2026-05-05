@@ -141,24 +141,26 @@ function extractSkillDescription(md) {
 // Walk skills/ accepting both flat and nested layouts:
 //   skills/<name>/SKILL.md
 //   skills/<group>/<name>/SKILL.md
+// A directory may be both: a parent skill (gstack/SKILL.md) AND a collection
+// hosting child skills (gstack/qa/SKILL.md). Surface both.
+// Top-level symlinks (e.g. `browse -> gstack/browse`) are skipped: their
+// canonical form shows up under the parent.
 async function discoverSkills() {
   const dir = join(HOME, 'skills');
   const out = [];
   try {
     for (const e of await readdir(dir, { withFileTypes: true })) {
       if (!e.isDirectory() || isHidden(`skills/${e.name}`)) continue;
-      // Direct skill
+      const child = join(dir, e.name);
       try {
-        const md = await readFile(join(dir, e.name, 'SKILL.md'), 'utf8');
+        const md = await readFile(join(child, 'SKILL.md'), 'utf8');
         out.push({ slug: e.name, description: extractSkillDescription(md) });
-        continue;
       } catch {}
-      // Nested collection
       try {
-        for (const s of await readdir(join(dir, e.name), { withFileTypes: true })) {
-          if (!s.isDirectory()) continue;
+        for (const s of await readdir(child, { withFileTypes: true })) {
+          if (!s.isDirectory() || s.name.startsWith('.')) continue;
           try {
-            const md = await readFile(join(dir, e.name, s.name, 'SKILL.md'), 'utf8');
+            const md = await readFile(join(child, s.name, 'SKILL.md'), 'utf8');
             out.push({ slug: `${e.name}/${s.name}`, description: extractSkillDescription(md) });
           } catch {}
         }
