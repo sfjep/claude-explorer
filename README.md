@@ -1,23 +1,29 @@
-# claude-explorer
+# claude-viewer
 
 **The dashboard Claude Code doesn't ship with.** Read every session
 transcript you've ever recorded. See what Claude has remembered about each
 of your projects. Watch your token spend per session, per project, in
 total. Locally, in one tab.
 
-![claude-explorer overview](./media/hero.gif)
+![claude-viewer overview](./media/hero.gif)
 
 ## Run
 
 ```
-git clone git@github.com:sfjep/claude-explorer.git
-cd claude-explorer
-pnpm install   # or npm install
-pnpm start
+npx claude-viewer
 ```
 
 Open `http://localhost:4567`. The server reads from `~/.claude/`, renders
 only what's there, never writes.
+
+To hack on it locally:
+
+```
+git clone git@github.com:sfjep/claude-viewer.git
+cd claude-viewer
+pnpm install   # or npm install
+pnpm start
+```
 
 ## What you actually get
 
@@ -47,7 +53,7 @@ Every tab appears only if the corresponding content exists.
 ## Configuration
 
 Zero config out of the box. For overrides, drop a
-`claude-explorer.config.json` in your `$CLAUDE_HOME`:
+`claude-viewer.config.json` in your `$CLAUDE_HOME`:
 
 ```json
 {

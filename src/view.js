@@ -86,7 +86,7 @@ export function shell({ title, section, slug, nav, content, crumbs, wide, safeMo
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} — claude-explorer</title>
+<title>${escapeHtml(title)} — claude-viewer</title>
 <style>${CSS}</style>
 </head>
 <body>

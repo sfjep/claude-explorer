@@ -1,4 +1,5 @@
-// claude-explorer: a local HTTP viewer for ~/.claude/.
+#!/usr/bin/env node
+// claude-viewer: a local HTTP viewer for ~/.claude/.
 // Auto-discovers what's there; renders only what exists.
 // Read-only, localhost-only, zero-config out of the box.
 //
@@ -271,7 +272,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`claude-explorer:  http://localhost:${PORT}`);
+  console.log(`claude-viewer:    http://localhost:${PORT}`);
   console.log(`reading from:     ${HOME}`);
   if (CONFIG.hide && CONFIG.hide.length > 0) console.log(`config hide:      ${CONFIG.hide.length} extra patterns`);
 });

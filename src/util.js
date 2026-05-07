@@ -32,7 +32,7 @@ const DEFAULT_HIDE = [
 
 export let CONFIG = { hide: [], label: {}, theme: 'dark' };
 try {
-  const raw = await readFile(join(HOME, 'claude-explorer.config.json'), 'utf8');
+  const raw = await readFile(join(HOME, 'claude-viewer.config.json'), 'utf8');
   CONFIG = { ...CONFIG, ...JSON.parse(raw) };
 } catch { /* zero-config default */ }
 

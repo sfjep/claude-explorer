@@ -1,9 +1,40 @@
 {
-  "name": "claude-explorer",
-  "version": "0.2.0",
-  "private": true,
+  "name": "claude-viewer",
+  "version": "0.3.0",
   "type": "module",
   "description": "Local HTTP viewer for ~/.claude/. Browse instructions, per-project memory, sessions, plans, skills, plugins, and any wiki you maintain.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "dashboard",
+    "viewer",
+    "cli",
+    "developer-tools"
+  ],
+  "author": "sfjep",
+  "license": "MIT",
+  "homepage": "https://github.com/sfjep/claude-viewer#readme",
+  "bugs": {
+    "url": "https://github.com/sfjep/claude-viewer/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sfjep/claude-viewer.git"
+  },
+  "bin": {
+    "claude-viewer": "./server.mjs"
+  },
+  "main": "./server.mjs",
+  "files": [
+    "server.mjs",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.mjs"
   },
