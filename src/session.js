@@ -146,7 +146,13 @@ function renderUserEvent(evt, meta, opts) {
   for (const tr of toolResults) {
     const summary = typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content);
     const { s, truncated } = cap(summary, caps.toolResult);
-    html += `${detailsTag(opts)} class="evt evt--tool-result"><summary><span class="evt__role">tool result</span> <span class="evt__tag">${escapeHtml(tr.tool_use_id || '').slice(-8)}</span></summary><pre>${escapeHtml(s)}${truncated ? '\n\n[... truncated]' : ''}</pre>${expandBtn(truncated)}</details>`;
+    const isErr = tr.is_error === true;
+    // Errored tool results: red tint + visible "error" chip + force-open so
+    // you don't have to click into every collapsed tool result to find the failure.
+    const cls = `evt evt--tool-result${isErr ? ' evt--error' : ''}`;
+    const openTag = isErr ? '<details open' : detailsTag(opts);
+    const errTag = isErr ? ' <span class="evt__tag evt__tag--err">error</span>' : '';
+    html += `${openTag} class="${cls}"><summary><span class="evt__role">tool result</span>${errTag} <span class="evt__tag">${escapeHtml(tr.tool_use_id || '').slice(-8)}</span></summary><pre>${escapeHtml(s)}${truncated ? '\n\n[... truncated]' : ''}</pre>${expandBtn(truncated)}</details>`;
   }
   return html;
 }
@@ -155,11 +161,16 @@ function renderAssistantEvent(evt, meta, opts) {
   const { caps } = opts;
   const content = evt.message && evt.message.content;
   if (!Array.isArray(content)) return '';
+  // Anthropic API errors (overload, rate limit, etc.) come through as
+  // assistant events with this flag set and the error text in a text block.
+  const isApiErr = evt.isApiErrorMessage === true;
   let html = '';
   for (const c of content) {
     if (c.type === 'text') {
       const { s, truncated } = cap(c.text || '', caps.text);
-      html += `<div class="evt evt--assistant">${meta}<div class="evt__role">assistant</div><div class="evt__body">${marked.parse(s)}${truncMarker(truncated)}</div>${expandBtn(truncated)}</div>`;
+      const cls = isApiErr ? 'evt evt--assistant evt--error' : 'evt evt--assistant';
+      const role = isApiErr ? 'assistant <span class="evt__tag evt__tag--err">api error</span>' : 'assistant';
+      html += `<div class="${cls}">${meta}<div class="evt__role">${role}</div><div class="evt__body">${marked.parse(s)}${truncMarker(truncated)}</div>${expandBtn(truncated)}</div>`;
     } else if (c.type === 'thinking') {
       const { s, truncated } = cap(c.thinking || c.text || '', caps.thinking);
       html += `${detailsTag(opts)} class="evt evt--thinking"><summary><span class="evt__role">thinking</span></summary><div class="evt__body">${marked.parse(s)}${truncMarker(truncated)}</div>${expandBtn(truncated)}</details>`;

@@ -20,6 +20,9 @@ export const CSS = `
   --user-tint: #1a1f2a;
   --asst-tint: #1c1a22;
   --tool-tint: #14110d;
+  --error-tint: #2a1414;
+  --error-border: #6b2828;
+  --error-text: #ff9a9a;
 }
 * { box-sizing: border-box; }
 ::selection { background: var(--selection); }
@@ -229,6 +232,9 @@ table.list .when { font-family: ui-monospace, monospace; color: var(--text-dim);
 .evt--assistant { background: var(--asst-tint); border-color: rgba(184, 168, 255, 0.18); }
 .evt--system { background: var(--bg-soft); }
 .evt--tool-use, .evt--tool-result, .evt--thinking { background: var(--tool-tint); padding: 0.5rem 0.85rem; }
+.evt--error { background: var(--error-tint); border-color: var(--error-border); }
+.evt--error .evt__role { color: var(--error-text); }
+.evt--error .evt__tag--err { color: var(--error-text); font-weight: 600; }
 .evt__role { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.25rem; font-weight: 600; }
 .evt__meta { font-size: 0.7rem; color: var(--text-dim); position: absolute; right: 1rem; top: 0.85rem; font-family: ui-monospace, monospace; }
 .evt__body { color: var(--text); }

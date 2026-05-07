@@ -24,16 +24,46 @@ export function decodeProjectSlug(slug) {
   return '/' + slug.slice(1).replace(/-/g, '/');
 }
 
+// Resolve an @import reference relative to HOME. Tries `<ref>.md` first,
+// then `<ref>` as-is, so both `@SOUL` and `@SOUL.md` work. Returns the
+// canonical relative path (always with `.md` if found that way), or null
+// if nothing exists under HOME.
+function resolveImport(ref) {
+  const candidates = ref.endsWith('.md') ? [ref] : [`${ref}.md`, ref];
+  for (const c of candidates) {
+    if (existsSync(join(HOME, c))) return c;
+  }
+  return null;
+}
+
 // Build the @import tree starting from a given markdown file.
+//   - Allows leading whitespace ("  @SOUL.md" works).
+//   - Optional `.md` extension ("@SOUL" resolves to "SOUL.md").
+//   - Reads the whole file, not just the first N lines.
+//   - Skips fenced code blocks so a markdown example doesn't get parsed.
+//   - Marks unresolved imports with `missing: true` instead of dropping them.
 async function buildImportGraph(file, seen) {
   if (seen.has(file)) return { file, imports: [], cycle: true };
   seen.add(file);
   const node = { file, imports: [] };
   try {
     const content = await readFile(join(HOME, file), 'utf8');
-    for (const line of content.split('\n').slice(0, 50)) {
-      const m = line.trim().match(/^@(\S+\.md)$/);
-      if (m && !isHidden(m[1])) node.imports.push(await buildImportGraph(m[1], seen));
+    let inFence = false;
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) { inFence = !inFence; continue; }
+      if (inFence) continue;
+      const m = trimmed.match(/^@(\S+)$/);
+      if (!m) continue;
+      const ref = m[1];
+      if (isHidden(ref)) continue;
+      const resolved = resolveImport(ref);
+      if (!resolved) {
+        node.imports.push({ file: ref, imports: [], missing: true });
+        continue;
+      }
+      if (isHidden(resolved)) continue;
+      node.imports.push(await buildImportGraph(resolved, seen));
     }
   } catch {}
   return node;

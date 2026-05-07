@@ -208,12 +208,18 @@ ${sections.join('\n')}`;
 export function instructionsIndex(nav) {
   let importHTML = '';
   if (nav.instructions.graph) {
+    // Link only root-level files (no `/` in path) since the instructions
+    // route doesn't serve nested paths. Missing imports render with a tag.
     const renderNode = (n) => {
       if (!n) return '';
-      const link = `<a href="/instructions/${n.file.replace(/\.md$/, '')}">${escapeHtml(n.file)}</a>`;
-      if (n.cycle) return `<li>${link} <em>(cycle)</em></li>`;
+      const linkable = !n.missing && !n.file.includes('/');
+      const label = linkable
+        ? `<a href="/instructions/${n.file.replace(/\.md$/, '')}">${escapeHtml(n.file)}</a>`
+        : escapeHtml(n.file);
+      if (n.missing) return `<li>${label} <em>(not found)</em></li>`;
+      if (n.cycle) return `<li>${label} <em>(cycle)</em></li>`;
       const kids = n.imports.length > 0 ? `<ul>${n.imports.map(renderNode).join('')}</ul>` : '';
-      return `<li>${link}${kids}</li>`;
+      return `<li>${label}${kids}</li>`;
     };
     importHTML = `<div class="import-tree"><div style="font-size:0.7rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem;">@import graph</div><ul>${renderNode(nav.instructions.graph)}</ul></div>`;
   }
