@@ -89,14 +89,6 @@ wrote them for yourself.
 Add more patterns via the config file's `hide` field if you want extra
 hidden.
 
-## What's not here yet
-
-- Search across content
-- Live reload (file watcher)
-- Light theme
-- Single-command install via `npx`
-- VS Code extension wrapper
-
 PRs welcome.
 
 ## License
